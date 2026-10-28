@@ -22,7 +22,22 @@ import           Common
 
 -- conversion a términos localmente sin nombres
 conversion :: LamTerm -> Term
-conversion = undefined
+conversion t = convAux t []
+
+convAux :: LamTerm -> [String] -> Term
+convAux (LVar s) e = case maybeBound s e of
+  Nothing -> Free (Global s)
+  Just i  -> Bound i
+
+convAux (LAbs s t l) e = Lam t (convAux l (s : e))
+
+convAux (LApp l1 l2) e = convAux l1 e :@: convAux l2 e
+
+maybeBound :: String -> [String] -> Maybe Int
+maybeBound s e = aux e 0
+  where
+    aux [] i    = Nothing
+    aux (n:e) i = if s == n then Just i else aux e (i+1)
 
 ----------------------------
 --- evaluador de términos
@@ -42,10 +57,15 @@ quote (VLam t f) = Lam t f
 
 -- evalúa un término en un entorno dado
 eval :: NameEnv Value Type -> Term -> Value
-eval = undefined
+eval nvs (Free n)          = findValue n nvs
+eval nvs (Lam t f)         = VLam t f
+eval nvs (t1 :@: t2)       = 
+  let (VLam s u) = eval nvs t1
+      v = eval nvs t2
+  in eval nvs (sub 0 (quote v) u)
 
-
-
+findValue :: Name -> NameEnv Value Type -> Value
+findValue n ((m,(v,t)):xs) = if n == m then v else findValue n xs
 
 ----------------------
 --- type checker

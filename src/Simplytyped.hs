@@ -31,7 +31,9 @@ convAux (LVar s) e = case maybeBound s e of
 
 convAux (LAbs s t l) e = Lam t (convAux l (s : e))
 
-convAux (LApp l1 l2) e = convAux l1 e :@: convAux l2 e
+convAux (LLet s t1 t2) e =  Let (convAux t1 e) (convAux t2 (s : e))
+
+convAux (LApp t1 t2) e = convAux t1 e :@: convAux t2 e
 
 maybeBound :: String -> [String] -> Maybe Int
 maybeBound s e = aux e 0
@@ -50,6 +52,7 @@ sub _ _ (Bound j) | otherwise = Bound j
 sub _ _ (Free n   )           = Free n
 sub i t (u   :@: v)           = sub i t u :@: sub i t v
 sub i t (Lam t'  u)           = Lam t' (sub (i + 1) t u)
+sub i t (Let t'  u)           = Let (sub (i + 1) t t') (sub (i + 1) t u)
 
 -- convierte un valor en el término equivalente
 quote :: Value -> Term
@@ -63,6 +66,10 @@ eval nvs (t1 :@: t2)       =
   let (VLam s u) = eval nvs t1
       v = eval nvs t2
   in eval nvs (sub 0 (quote v) u)
+
+eval nvs (Let t1 t2) =
+  let v = eval nvs t1
+  in eval nvs (sub 0 (quote v) t2)
 
 findValue :: Name -> NameEnv Value Type -> Value
 findValue n ((m,(v,t)):xs) = if n == m then v else findValue n xs
@@ -113,5 +120,5 @@ infer' c e (t :@: u) = infer' c e t >>= \tt -> infer' c e u >>= \tu ->
     FunT t1 t2 -> if (tu == t1) then ret t2 else matchError t1 tu
     _          -> notfunError tt
 infer' c e (Lam t u) = infer' (t : c) e u >>= \tu -> ret $ FunT t tu
-
+infer' c e (Let t u) = infer' c e t >>= \tt -> infer' (tt : c) e u
 

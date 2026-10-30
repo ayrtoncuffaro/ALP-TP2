@@ -1,0 +1,12 @@
+
+def true = \p:List Nat. \q:List Nat. p
+
+def false = \p:List Nat. \q:List Nat. q
+
+def iscero = \m:Nat. R true (\r:List Nat->List Nat->List Nat. \n:Nat. false) m
+
+def eq = \n:Nat. R iscero (\p: Nat->List Nat ->List Nat->List Nat. \z:Nat. \m:Nat. R false (\r:List Nat->List Nat->List Nat. \y:Nat. p y) m) n
+
+def borrar = \x:Nat. \l:List Nat. RL nil (\y:Nat. \r:List Nat. (eq x y) r (cons y r)) l
+
+def elimDups = \l:List Nat. RL nil (\x:Nat. \r:List Nat. cons x (borrar x r)) l

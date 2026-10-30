@@ -39,6 +39,10 @@ convAux LZero e = Zero
 convAux (LSuc n) e = Suc (convAux n e)
 convAux (LRec t f n) e = Rec (convAux t e) (convAux f e) (convAux n e)
 
+convAux LNil e = Nil
+convAux (LCons x l) e = Cons (convAux x e) (convAux l e)
+convAux (LRecL t f l) e = RecL (convAux t e) (convAux f e) (convAux l e)
+
 maybeBound :: String -> [String] -> Maybe Int
 maybeBound s e = aux e 0
   where
@@ -63,11 +67,19 @@ sub i t Zero        = Zero
 sub i t (Suc n)     = Suc (sub i t n)
 sub i t (Rec b f n) = Rec (sub i t b) (sub i t f) (sub i t n)
 
+sub i t Nil          = Nil
+sub i t (Cons x l)   = Cons (sub i t x) (sub i t l)
+sub i t (RecL b f l) = RecL (sub i t b) (sub i t f) (sub i t l)
+
 -- convierte un valor en el término equivalente
 quote :: Value -> Term
 quote (VLam t f)      = Lam t f
+
 quote (VNum NZero)    = Zero
 quote (VNum (NSuc n)) = Suc (quote (VNum n))
+
+quote (VList VNil)       = Nil
+quote (VList (VCons x l)) = Cons (quote (VNum x)) (quote (VList l)) 
 
 -- evalúa un término en un entorno dado
 eval :: NameEnv Value Type -> Term -> Value
@@ -85,7 +97,7 @@ eval nvs (Let t1 t2) =
 eval nvs Zero = VNum NZero
 
 eval nvs (Suc n) =
-  let (VNum n') = eval nvs n
+  let VNum n' = eval nvs n
   in VNum (NSuc n')
 
 eval nvs (Rec t f Zero) = eval nvs t
@@ -93,6 +105,20 @@ eval nvs (Rec t f Zero) = eval nvs t
 eval nvs (Rec t f (Suc n)) = eval nvs (f :@: (Rec t f n) :@: n)
 
 eval nvs (Rec t f n) = eval nvs (Rec t f (quote (eval nvs n)))
+
+eval nvs Nil = VList VNil
+
+eval nvs (Cons x l) =
+  let VNum x'  = eval nvs x
+      VList l' = eval nvs l
+  in VList (VCons x' l')
+
+eval nvs (RecL t f Nil) = eval nvs t
+
+eval nvs (RecL t f (Cons x l)) = eval nvs (f :@: x :@: (RecL t f l))
+
+eval nvs (RecL t f l) = eval nvs (RecL t f (quote (eval nvs l)))
+
 
 findValue :: Name -> NameEnv Value Type -> Value
 findValue n ((m,(v,t)):xs) = if n == m then v else findValue n xs
@@ -155,4 +181,21 @@ infer' c e (Rec t f n) = do
   let te = FunT tt (FunT NatT tt)
   if tf /= te then matchError te tf 
               else if tn /= NatT then matchError NatT tn
+                                 else ret tt
+
+infer' c e Nil = ret ListT
+infer' c e (Cons x l) = do
+  tx <- infer' c e x
+  tl <- infer' c e l
+  if tx /= NatT then matchError NatT tx
+                else if tl /= ListT then matchError ListT tl
+                                    else ret ListT
+
+infer' c e (RecL t f l) = do
+  tt <- infer' c e t
+  tf <- infer' c e f
+  tl <- infer' c e l
+  let te = FunT NatT (FunT tt tt)
+  if tf /= te then matchError te tf 
+              else if tl /= ListT then matchError ListT tl
                                  else ret tt

@@ -48,7 +48,7 @@ pp ii vs (Let v t) =
 
 pp ii vs Zero = text "0"
 pp ii vs (Suc n) =
-  text "succ "
+  text "suc "
     <> parensIf (not (isAtom n)) (pp ii vs n)
 pp ii vs (Rec t f n) =
   text "R "
@@ -56,6 +56,21 @@ pp ii vs (Rec t f n) =
       [ (parensIf (not (isAtom t)) (pp ii vs t))
       , nest 1 (parensIf (not (isAtom f)) (pp ii vs f))
       , nest 1 (parensIf (not (isAtom n)) (pp ii vs n))
+      ]
+
+pp ii vs Nil = text "nil"
+pp ii vs (Cons x l) =
+  text "cons "
+    <> sep
+      [ (parensIf (not (isAtom x)) (pp ii vs x))
+      , nest 1 (parensIf (not (isAtom l)) (pp ii vs l))
+      ]
+pp ii vs (RecL t f l) =
+  text "RL "
+    <> sep
+      [ (parensIf (not (isAtom t)) (pp ii vs t))
+      , nest 1 (parensIf (not (isAtom f)) (pp ii vs f))
+      , nest 1 (parensIf (not (isAtom l)) (pp ii vs l))
       ]
 
 isLam :: Term -> Bool
@@ -70,12 +85,14 @@ isAtom :: Term -> Bool
 isAtom (Bound _) = True
 isAtom (Free _)  = True
 isAtom Zero      = True
+isAtom Nil       = True
 isAtom _         = False
 
 -- pretty-printer de tipos
 printType :: Type -> Doc
 printType EmptyT = text "E"
 printType NatT   = text "Nat"
+printType ListT  = text "List Nat"
 printType (FunT t1 t2) =
   sep [parensIf (isFun t1) (printType t1), text "->", printType t2]
 
@@ -93,6 +110,9 @@ fv (Let t   u       ) = fv t ++ fv u
 fv Zero               = []
 fv (Suc n)            = fv n
 fv (Rec t f n)        = fv t ++ fv f ++ fv n
+fv Nil                = []
+fv (Cons x l)         = fv x ++ fv l
+fv (RecL t f l)       = fv t ++ fv f ++ fv l
 
 ---
 printTerm :: Term -> Doc

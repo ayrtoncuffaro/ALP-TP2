@@ -35,6 +35,10 @@ convAux (LLet s t1 t2) e =  Let (convAux t1 e) (convAux t2 (s : e))
 
 convAux (LApp t1 t2) e = convAux t1 e :@: convAux t2 e
 
+convAux LZero e = Zero
+convAux (LSuc n) e = Suc (convAux n e)
+convAux (LRec t f n) e = Rec (convAux t e) (convAux f e) (convAux n e)
+
 maybeBound :: String -> [String] -> Maybe Int
 maybeBound s e = aux e 0
   where
@@ -52,11 +56,18 @@ sub _ _ (Bound j) | otherwise = Bound j
 sub _ _ (Free n   )           = Free n
 sub i t (u   :@: v)           = sub i t u :@: sub i t v
 sub i t (Lam t'  u)           = Lam t' (sub (i + 1) t u)
-sub i t (Let t'  u)           = Let (sub (i + 1) t t') (sub (i + 1) t u)
+
+sub i t (Let t'  u) = Let (sub (i + 1) t t') (sub (i + 1) t u)
+
+sub i t Zero        = Zero
+sub i t (Suc n)     = Suc (sub i t n)
+sub i t (Rec b f n) = Rec (sub i t b) (sub i t f) (sub i t n)
 
 -- convierte un valor en el término equivalente
 quote :: Value -> Term
-quote (VLam t f) = Lam t f
+quote (VLam t f)      = Lam t f
+quote (VNum NZero)    = Zero
+quote (VNum (NSuc n)) = Suc (quote (VNum n))
 
 -- evalúa un término en un entorno dado
 eval :: NameEnv Value Type -> Term -> Value
@@ -70,6 +81,18 @@ eval nvs (t1 :@: t2)       =
 eval nvs (Let t1 t2) =
   let v = eval nvs t1
   in eval nvs (sub 0 (quote v) t2)
+
+eval nvs Zero = VNum NZero
+
+eval nvs (Suc n) =
+  let (VNum n') = eval nvs n
+  in VNum (NSuc n')
+
+eval nvs (Rec t f Zero) = eval nvs t
+
+eval nvs (Rec t f (Suc n)) = eval nvs (f :@: (Rec t f n) :@: n)
+
+eval nvs (Rec t f n) = eval nvs (Rec t f (quote (eval nvs n)))
 
 findValue :: Name -> NameEnv Value Type -> Value
 findValue n ((m,(v,t)):xs) = if n == m then v else findValue n xs
@@ -120,5 +143,16 @@ infer' c e (t :@: u) = infer' c e t >>= \tt -> infer' c e u >>= \tu ->
     FunT t1 t2 -> if (tu == t1) then ret t2 else matchError t1 tu
     _          -> notfunError tt
 infer' c e (Lam t u) = infer' (t : c) e u >>= \tu -> ret $ FunT t tu
+
 infer' c e (Let t u) = infer' c e t >>= \tt -> infer' (tt : c) e u
 
+infer' c e Zero = ret NatT
+infer' c e (Suc n) = infer' c e n >>= \tt -> if tt == NatT then ret NatT else matchError NatT tt
+infer' c e (Rec t f n) = do
+  tt <- infer' c e t
+  tf <- infer' c e f
+  tn <- infer' c e n
+  let te = FunT tt (FunT NatT tt)
+  if tf /= te then matchError te tf 
+              else if tn /= NatT then matchError NatT tn
+                                 else ret tt
